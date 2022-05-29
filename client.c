@@ -1,11 +1,11 @@
-#include "packet.h"
+#include "data.h"
 
 #define PORT 5555
 #define hostNameLength 50
 #define messageLength 256
 
-void error(char * msg, int line) {
-    perror("\nLine %d: (client.c) > %s\n", line, msg);
+void client_error(char * msg) {
+    perror("\n(client.c) > %s\n", msg);
 }
 
 void clientInitSocketAdress(struct sockaddr_in *name, char *hostName, unsigned short int port) {
@@ -18,7 +18,7 @@ void clientInitSocketAdress(struct sockaddr_in *name, char *hostName, unsigned s
     /* Get info about host. */
     hostInfo = gethostbyname(hostName); 
     if(hostInfo == NULL) {
-        fprintf(stderr, "initSocketAddress - Unknown host %s\n",hostName);
+        client_error("Unknown host %s", hostName);
         exit(EXIT_FAILURE);
     }
 
@@ -27,62 +27,46 @@ void clientInitSocketAdress(struct sockaddr_in *name, char *hostName, unsigned s
 }
 
 int client_Connect(int * fileDescriptor, fd_set *activeFdSet, struct sockaddr_in * hostInfo) {
-
-    /* Variables:
-     * state - Used by switch (state-machine)
-     * readFdSet - Used by select and FD_ISSET to see which sockets there is input on (We only use one)
-     * running - Used in the loop around the switch-state
-     * counter - Counter
-     * ACK_NR - Used to temporary save the acknr in some cases
-     * windowSize - A randomized number to represent the window size used later in sliding window
-     * timer - Used by select to create timeouts
-     * sSyn, rAck, sAck - Structs to read and write with between server/client */
-
-    short state = 0;
-    fd_set readFdSet;
-    bool running = 1;
-    int counter = 5;
-    int ACK_NR = 0;
-    int windowSize = (int) generate_Number(1, 5);
+    int state = 0, counter = 5, windowSize = (int) generate_Number(1, 5);
     struct timeval timer;
 
-    packet sSyn;
-    packet rAck;
-    packet sAck;
+    fd_set readFdSet;
+    data clientSyn;
+    data serverSynAck;
+    data clientAck;
 
-    while(running) {
+    while(1) {
         switch(state) {
 
             // State 0, Klient skickar SYN till servern (Titta state machine).
             case 0:
-                init_Packet(&sSyn); // Default värden på sSYN paketet.
-                sSyn.SYN = true; // sSYN är ett SYN paket.
-                sSyn.length = windowSize; // 
-                calc_Sequence(&sSyn);
+                zero_Packet(&clientSyn); // Default värden på clientSyn paketet.
+                clientSyn.SYN = true; // clientSyn är ett SYN paket.
+                clientSyn.ws = windowSize; // 
+                calc_Sequence(&clientSyn);
 
                 while(counter > 0 && state == 0) {
-                    packet_Write(*fileDescriptor, &sSyn, sizeof(sSyn), hostInfo);
-                    printf("SYN sent with SEQ nr: %d", sSyn.seq);
+                    packet_Write(*fileDescriptor, &clientSyn, sizeof(clientSyn), hostInfo);
+                    client_error("SYN packet sent with sequence number: %d.", clientSyn.seq);
                     timer.tv_sec = 0;
                     timer.tv_usec = 1;
                     
                     readFdSet = *activeFdSet;
 
                     // Tittar om readFdSet har input.
-                    int fdSELECT = select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer);
+                    int fdSelect = select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer);
                     
-                    if(t == -1) printf("Error");
+                    if(fdSelect == -1) client_error("Error selecting from readFdSet.");
 
                     if(FD_ISSET(*fileDescriptor, &readFdSet)) {
-                        if(packet_Read(*fileDescriptor, &rAck, hostInfo) == 0) {
-                            if(rAck.ACK == true && rAck.SYN == true && Ack.ACKnr == sSyn.seq) {
-                                printf("Client received ACK+SYN");
-                                ACK_NR = rAck.seq;
-                                windowSize = rAck.length;
+                        if(packet_Read(*fileDescriptor, serverSynAck, hostInfo) == 0) {
+                            if(serverSynAck.ACK == true && serverSynAck.SYN == true) {
+                                client_error("Client received ACK+SYN");
+                                windowSize serverSynAck.ws;
                                 state = 1;
                             }
                             else {
-                                printf("SYN + ACK not received from server");
+                                client_error("SYN + ACK not received from server.");
                             }
                         }                        
                     }
@@ -90,38 +74,99 @@ int client_Connect(int * fileDescriptor, fd_set *activeFdSet, struct sockaddr_in
                         // Om SYN paketet är förlorat.
                         counter--;
                         state = 0;
-                        if(counter == 0) exit(EXIT_FAILURE);
+                        if(counter == 0) {
+                            client_error("SYN + ACK not received in 5 tries."):
+                            exit(EXIT_FAILURE);
+                        }    
                     }
                 }
                 break;
 
             // State 1, Klient har fått SYN+ACK från servern (Titta state machine).
             case 1:
-                init_Packet(&sAck);
-                calc_Sequence(&sAck);
-                sAck.ACK = true;
-                sAck.ACKnr = ACK_NR;
+                zero_Packet(&clientAck);
+                calc_Sequence(&clientAck);
+                clientAck.ACK = true;
+
+                do {
+                    client_error("ACK sent on %d with sequence number: %d"serverSynAck.seq, clientAck.seq);
+                    packet_Write(*fileDescriptor, &clientAck, sizeof(clientAck), hostInfo);
+                    // Titta ifall klienten får fler paket efter..
+                    break;
+                }while(1)
+                break;
         }
     }
-
+    return windowSize;
 }
 
-int client_Disconnect() {
-    
+int client_Disconnect(int * fileDescriptor, fd_set * activeFdSet, struct sockaddr_in * hostInfo) {
+    int counter = 3;
+    struct timeval timer;
+
+    fd_set readFdSet;
+    data clientFin;
+    data serverFinAck;
+    data clientAck;
+
+    zero_Packet(&clientFin);
+    zero_Packet(&clientAck);
+
+    calc_Sequence(&clientFin);
+    calc_Sequence(&clientAck);
+
+    clientFin.FIN = true;
+    clientAck.ACK = true;
+
+    client_error("Disconnecting...");
+
+    while(counter >= 0) {
+        packet_Write(*fileDescriptor, &clientFin, sizeof(clientFin), hostInfo);
+        client_error("FIN sent with sequence number: %d", clientFin.seq);
+
+        timer.tv_sec = 0;
+        timer.tv_usec = 1;
+
+        readFdSet = *activeFdSet;
+
+        int fdSelect = select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer);
+                    
+        if(fdSelect == -1) client_error("Error selecting from readFdSet.");
+
+        if(FD_ISSET(*fileDescriptor, &readFdSet)) {
+            if(packet_Read(*fileDescriptor, serverFinAck, hostInfo) == 0) {
+                if(serverFinAck.ACK == true && serverFinAck.FIN == true) {
+                    client_error("FIN+ACK received from server. Sequence number %d", serverFinAck.seq);
+                    packet_Write(*fileDescriptor, &clientAck, sizeof(clientAck), hostInfo);
+                    client_error("ACK sent to server. Sequence number %d", clientAck.seq);
+                    return 0;
+
+                }
+                else {
+                    client_error("No FIN + ACK received");
+                }
+            }
+        }
+        else {
+            client_error("Timeout %d", 4-counter);
+        }
+        counter--;
+    }
+    return -1;
 }
 
 void send_Slidingwindow() {
 
 }
 
-void main(char * address) {
+void main_client(char * address) {
     int fileDescriptor, windowSize = 0;
     struct sockaddr_in hostInfo;
     fd_set activeFdSet;
 
     fileDescriptor = socket(PF_INET, SOCK_DGRAM, 0);
     if(fileDescriptor < 0) {
-        error("Could not create a socket", 58);
+        client_error("Could not create a socket");
         exit(EXIT_FAILURE);
     }
     clientInitSocketAdress(&hostInfo, address, PORT);

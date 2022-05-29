@@ -1,18 +1,14 @@
-#include "packet.h"
+#include "data.h"
 
-static {
-    srand(time(NULL));
-}
-
-int calc_Checksum(packet * datapacket) {
+int calc_Checksum(data * datapacket) {
     // Ger checksumma.
 }
 
-void calc_Sequence(packet * datapacket) {
+void calc_Sequence(data * datapacket) {
     // Ger ett sekvensnummer.
 }
 
-int generate_Error() {
+int generate_Error(data * datapacket) {
     // Ska göra egna fel i paketen osv för att simulera fel.
 }
 
@@ -20,7 +16,7 @@ int generate_Number(int floor, int roof) {
     return (rand() % roof) + floor;
 }
 
-void init_Packet(packet * datapacket) {
+void zero_Packet(data * datapacket) {
     datapacket->SYN = false;
     datapacket->ACK = false;
     datapacket->FIN = false;
@@ -31,15 +27,12 @@ void init_Packet(packet * datapacket) {
     datapacket->flags = 0;
 
     datapacket->id = generate_Number(10, 1000);
-
-    // malloc() packet data pointer?
-
 }
 
-void packet_Write(int fileDescriptor, packet * data, int length, struct sockaddr_in * hostInfo) {
+void packet_Write(int fileDescriptor, data * data, int length, struct sockaddr_in * hostInfo) {
     // Skickar paketet till fileDescriptor socket.
 }
 
-void packet_Read(int fileDescriptor, packet * readData, struct sockaddr_in * hostInfo) {
+void packet_Read(int fileDescriptor, data * readData, struct sockaddr_in * hostInfo) {
     // Läser socket in i ett paket.
 }
