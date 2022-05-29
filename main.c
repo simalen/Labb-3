@@ -10,7 +10,7 @@ void main(int argc, char *argv[]) {
     else {
         strncpy(hostName, argv[1], hostNameLength);
         hostName[hostNameLength - 1] = '\0';
-        perror("Starting client at %s..\n", hostName);
+        printf("Starting client at %s..\n", hostName);
         main_client(hostName);
     }
 }

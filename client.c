@@ -1,13 +1,5 @@
 #include "data.h"
 
-#define PORT 5555
-#define hostNameLength 50
-#define messageLength 256
-
-void client_error(char * msg) {
-    perror("\n(client.c) > %s\n", msg);
-}
-
 void clientInitSocketAdress(struct sockaddr_in *name, char *hostName, unsigned short int port) {
     struct hostent *hostInfo; /* Contains info about the host */
     /* Socket address format set to AF_INET for Internet use. */
@@ -18,7 +10,7 @@ void clientInitSocketAdress(struct sockaddr_in *name, char *hostName, unsigned s
     /* Get info about host. */
     hostInfo = gethostbyname(hostName); 
     if(hostInfo == NULL) {
-        client_error("Unknown host %s", hostName);
+        printf("\n(client.c) > Unknown host %s\n", hostName);
         exit(EXIT_FAILURE);
     }
 
@@ -42,12 +34,12 @@ int client_Connect(int * fileDescriptor, fd_set *activeFdSet, struct sockaddr_in
             case 0:
                 zero_Packet(&clientSyn); // Default värden på clientSyn paketet.
                 clientSyn.SYN = true; // clientSyn är ett SYN paket.
-                clientSyn.ws = windowSize; // 
+                clientSyn.ws = windowSize;
                 calc_Sequence(&clientSyn);
 
                 while(counter > 0 && state == 0) {
                     packet_Write(*fileDescriptor, &clientSyn, sizeof(clientSyn), hostInfo);
-                    client_error("SYN packet sent with sequence number: %d.", clientSyn.seq);
+                    printf("\n(client.c) > SYN packet sent with sequence number: %d.\n", clientSyn.SEQ);
                     timer.tv_sec = 0;
                     timer.tv_usec = 1;
                     
@@ -56,17 +48,17 @@ int client_Connect(int * fileDescriptor, fd_set *activeFdSet, struct sockaddr_in
                     // Tittar om readFdSet har input.
                     int fdSelect = select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer);
                     
-                    if(fdSelect == -1) client_error("Error selecting from readFdSet.");
+                    if(fdSelect == -1) printf("\n(client.c) > Error selecting from readFdSet.\n");
 
                     if(FD_ISSET(*fileDescriptor, &readFdSet)) {
-                        if(packet_Read(*fileDescriptor, serverSynAck, hostInfo) == 0) {
+                        if(packet_Read(*fileDescriptor, &serverSynAck, hostInfo) == 0) {
                             if(serverSynAck.ACK == true && serverSynAck.SYN == true) {
-                                client_error("Client received ACK+SYN");
-                                windowSize serverSynAck.ws;
+                                printf("\n(client.c) > Client received ACK+SYN.\n");
+                                windowSize = serverSynAck.ws;
                                 state = 1;
                             }
                             else {
-                                client_error("SYN + ACK not received from server.");
+                                printf("\n(client.c) > SYN + ACK not received from server.\n");
                             }
                         }                        
                     }
@@ -75,7 +67,7 @@ int client_Connect(int * fileDescriptor, fd_set *activeFdSet, struct sockaddr_in
                         counter--;
                         state = 0;
                         if(counter == 0) {
-                            client_error("SYN + ACK not received in 5 tries."):
+                            printf("\n(client.c) > SYN + ACK not received in 5 tries.\n");
                             exit(EXIT_FAILURE);
                         }    
                     }
@@ -89,11 +81,11 @@ int client_Connect(int * fileDescriptor, fd_set *activeFdSet, struct sockaddr_in
                 clientAck.ACK = true;
 
                 do {
-                    client_error("ACK sent on %d with sequence number: %d"serverSynAck.seq, clientAck.seq);
+                    printf("\n(client.c) > ACK sent with sequence number %d.\n", clientAck.SEQ);
                     packet_Write(*fileDescriptor, &clientAck, sizeof(clientAck), hostInfo);
                     // Titta ifall klienten får fler paket efter..
                     break;
-                }while(1)
+                }while(1);
                 break;
         }
     }
@@ -118,11 +110,16 @@ int client_Disconnect(int * fileDescriptor, fd_set * activeFdSet, struct sockadd
     clientFin.FIN = true;
     clientAck.ACK = true;
 
-    client_error("Disconnecting...");
+    printf("\n(client.c) > Disconnecting...\n");
+
+    /* Klienten skickar ett FIN till servern.
+     * Klienten väntar sedan på ett FIN+ACK från servern.
+     * Klienten skickar ACK till servern innan den disconnectar
+     */
 
     while(counter >= 0) {
         packet_Write(*fileDescriptor, &clientFin, sizeof(clientFin), hostInfo);
-        client_error("FIN sent with sequence number: %d", clientFin.seq);
+        printf("\n(client.c) > FIN sent with sequence number: %d\n", clientFin.SEQ);
 
         timer.tv_sec = 0;
         timer.tv_usec = 1;
@@ -131,24 +128,23 @@ int client_Disconnect(int * fileDescriptor, fd_set * activeFdSet, struct sockadd
 
         int fdSelect = select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer);
                     
-        if(fdSelect == -1) client_error("Error selecting from readFdSet.");
+        if(fdSelect == -1) printf("\n(client.c) > Error selecting from readFdSet.\n");
 
         if(FD_ISSET(*fileDescriptor, &readFdSet)) {
-            if(packet_Read(*fileDescriptor, serverFinAck, hostInfo) == 0) {
+            if(packet_Read(*fileDescriptor, &serverFinAck, hostInfo) == 0) {
                 if(serverFinAck.ACK == true && serverFinAck.FIN == true) {
-                    client_error("FIN+ACK received from server. Sequence number %d", serverFinAck.seq);
+                    printf("\n(client.c) > FIN+ACK received from server. Sequence number: %d\n", serverFinAck.SEQ);
                     packet_Write(*fileDescriptor, &clientAck, sizeof(clientAck), hostInfo);
-                    client_error("ACK sent to server. Sequence number %d", clientAck.seq);
+                    printf("\n(client.c) > ACK sent to server. Sequence number %d\n", clientAck.SEQ);
                     return 0;
-
                 }
                 else {
-                    client_error("No FIN + ACK received");
+                    printf("\n(client.c) > No FIN + ACK received\n");
                 }
             }
         }
         else {
-            client_error("Timeout %d", 4-counter);
+            printf("\n(client.c) > Timeout %d\n", 4-counter);
         }
         counter--;
     }
@@ -166,7 +162,7 @@ void main_client(char * address) {
 
     fileDescriptor = socket(PF_INET, SOCK_DGRAM, 0);
     if(fileDescriptor < 0) {
-        client_error("Could not create a socket");
+        printf("\n(client.c) > Could not create socket.\n");
         exit(EXIT_FAILURE);
     }
     clientInitSocketAdress(&hostInfo, address, PORT);
@@ -176,5 +172,5 @@ void main_client(char * address) {
 
     windowSize = client_Connect(&fileDescriptor, &activeFdSet, &hostInfo);
     send_Slidingwindow(&fileDescriptor, &activeFdSet, &hostInfo, &windowSize);
-    client_Disconnect(&fileDescriptor, &activeFdSet, &hostInfo, &windowSize);
+    client_Disconnect(&fileDescriptor, &activeFdSet, &hostInfo);
 }

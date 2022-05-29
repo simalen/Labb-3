@@ -10,6 +10,12 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <stdbool.h>
+
+#define PORT 5555
+#define hostNameLength 50
+#define messageLength 256
+#define MAXMSG 4096
 
 #ifndef data
 
@@ -25,9 +31,9 @@ int calc_Checksum(data * datapacket);
 void calc_Sequence(data * datapacket);
 int generate_Error(data * datapacket);
 int generate_Number(int floor, int roof);
-void init_Packet(data * datapacket);
+void zero_Packet(data * datapacket);
 
 void packet_Write(int fileDescriptor, data * data, int length, struct sockaddr_in * hostInfo);
-void packet_Read(int fileDescriptor, data * readData, struct sockaddr_in * hostInfo);
+int packet_Read(int fileDescriptor, data * readData, struct sockaddr_in * hostInfo);
 
 #endif
