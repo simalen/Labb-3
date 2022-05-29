@@ -12,6 +12,9 @@
 #include <netdb.h>
 #include <stdbool.h>
 
+#include "server.h"
+#include "client.h"
+
 #define PORT 5555
 #define hostNameLength 50
 #define messageLength 256
