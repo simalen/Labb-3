@@ -1,14 +1,10 @@
 CC = gcc
 CFLAGS = -Wall
-PROGRAMS = client server
+PROGRAMS = prog
+TARGET = main client server data
 
-ALL: ${PROGRAMS}
-
-client: client.c
-	${CC} ${CFLAGS} -o client client.c
-
-server: server.c
-	${CC} ${CFLAGS} -o server server.c
+prog: ${TARGET}
+	${CC} ${CFLAGS} -o prog
 
 clean:
 	rm -f ${PROGRAMS}

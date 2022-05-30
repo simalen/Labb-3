@@ -1,7 +1,15 @@
 #include "data.h"
 
-int calc_Checksum(data * datapacket) {
+int calc_Checksum(data * datapacket, int length) {
     // Ger checksumma.
+    int count = 0;
+    unsigned int Sum = 0;
+
+    do {
+        Sum = Sum + datapacket->msgData[count];
+    }while(--length);
+    Sum = -Sum;
+    return (Sum & 0xFF);
 }
 
 void calc_Sequence(data * datapacket) {

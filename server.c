@@ -104,7 +104,40 @@ int server_Connect(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in 
 }
 
 void server_Disconnect(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in *hostInfo) {
-    
+    data write, read;
+    int counter = 0;
+    struct timeval timer;
+    fd_set readFdSet;
+
+    zero_Packet(&write);
+    zero_Packet(&read);
+    calc_Sequence(&write);
+    write.ACK = true;
+    write.FIN = true;
+
+    do {
+        packet_Write(*fileDescriptor, &write, sizeof(write), hostInfo);
+        printf("\n(server.c) > FIN+ACK sent to the client with SEQ: %d\n", write.SEQ);
+
+        timer.tv_sec = 1;
+        timer.tv_usec = 0;
+
+        readFdSet = *activeFdSet;
+
+        if(select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer)) printf("\n(server.c) > Error selecting from readFdSet.\n");
+        if(FD_ISSET(*fileDescriptor, &readFdSet)) {
+            if(packet_Read(*fileDescriptor, &read, hostInfo) == 0) {
+                if(read.ACK == true) {
+                    printf("\n(server.c) > ACK received, SEQ %d, disconnecting.\n", read.SEQ);
+                    return;
+                }
+            }
+        }
+        else {
+            counter++;
+            printf("\n(server.c) > Timeout %d.\n", counter+1);
+        }
+    }while(counter <= 3);
 }
 
 void receive_Slidingwindow(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in *hostInfo, int windowSize) {
