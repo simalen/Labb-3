@@ -29,6 +29,8 @@ int makeSocket(unsigned short int port) {
     return(sock);
 }
 
+int n;
+
 int server_Connect(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in *hostInfo) {
     data write, read;
     int state = 0;
@@ -37,17 +39,19 @@ int server_Connect(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in 
     struct timeval timer;
     fd_set readFdSet;
 
+    printf("\n(server.c)(CON S0) > Attempting to CONNECT to client..\n");
+
     do {
         switch (state) {
             // Waiting for SYN from client..
             case 0:
                 readFdSet = *activeFdSet;
-                if(select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer)) printf("\n(server.c) > Error selecting from readFdSet.\n");
-
+                if(select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer) < 0) printf("\n(server.c)(CON S0) > Error selecting from readFdSet.\n");
                 if(FD_ISSET(*fileDescriptor, &readFdSet)) {
+                    printf("\n(server.c)(CON S0) > Receiving input on socket, reading socket..\n");
                     if(packet_Read(*fileDescriptor, &read, hostInfo) == 0) {
                         if(read.SYN == true) {
-                            printf("\n(server.c) > SYN received. Sequence number: %d\n", read.SEQ);
+                            printf("\n(server.c)(CON S0) > SYN received. Sequence number: %d\n", read.SEQ);
                             if(read.ws < windowSize) windowSize = read.ws;
                             state = 1;
                         }
@@ -61,36 +65,37 @@ int server_Connect(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in 
                 write.SYN = true;
                 write.ws = windowSize;
                 calc_Sequence(&write);
-                write.ACKnr = read.SEQ;
+                write.SEQR = read.SEQ;
 
                 do {
                     packet_Write(*fileDescriptor, &write, sizeof(write), hostInfo);
-                    printf("\n(server.c) > ACK+SYN sent on %d with sequence %d.\n", write.ACKnr, write.SEQ);
+                    printf("\n(server.c)(CON S1) > ACK+SYN sent on %d with Sequence number: %d.\n", write.SEQR, write.SEQ);
 
                     timer.tv_sec = 0;
                     timer.tv_usec = 300000;
                     readFdSet = *activeFdSet;
 
-                    if(select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer)) printf("\n(server.c) > Error selecting from readFdSet.\n");
+                    if(select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer) < 0) printf("\n(server.c)(CON S1) > Error selecting from readFdSet.\n");
                     if(FD_ISSET(*fileDescriptor, &readFdSet)) {
                         // Return -1 if checksum doesnt match in packet_read.
                         if(packet_Read(*fileDescriptor, &read, hostInfo) == -1) {
-                            printf("\n(server.c) > Wrong checksum received\n");
+                            printf("\n(server.c)(CON S1) > Wrong checksum received\n");
                             zero_Packet(&read);
                         }
-                        if(read.ACK == true && read.ACKnr == write.SEQ) {
-                            printf("\n(server.c) > Final ACK received.\n");
+                        if(read.ACK == true && read.SEQR == write.SEQ) {
+                            printf("\n(server.c)(CON S1) > Final ACK received with Sequence number: %d.\n", read.SEQ);
                             // Handshake success.
-                            printf("\n(server.c) > Handshake successful.\n");
-                            return;
+                            printf("\n(server.c)(CON S1) > Connection successful (SERVER_CONNECT).\n");
+                            n = read.SEQ;
+                            return windowSize;
                         }
                         else {
-                            printf("\n(server.c) > ACK not received. Attempt number %d.\n", counter+1);
+                            printf("\n(server.c)(CON S1) > ACK not received. Attempt number %d.\n", counter+1);
                             counter++;
                         }
                     }
                     else {
-                        printf("\n(server.c) > Timeout.\n");
+                        printf("\n(server.c)(CON S1) > Timeout.\n");
                     }
                     if(counter > 3) {
                         exit(EXIT_FAILURE);
@@ -106,6 +111,7 @@ int server_Connect(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in 
 void server_Disconnect(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in *hostInfo) {
     data write, read;
     int counter = 0;
+    int state = 0;
     struct timeval timer;
     fd_set readFdSet;
 
@@ -114,37 +120,70 @@ void server_Disconnect(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr
     calc_Sequence(&write);
     write.ACK = true;
     write.FIN = true;
+    write.SEQR = n;
+
+    printf("\n(server.c)(DCON S0) > Attempting to DISCONNECT from client..\n");
 
     do {
-        packet_Write(*fileDescriptor, &write, sizeof(write), hostInfo);
-        printf("\n(server.c) > FIN+ACK sent to the client with SEQ: %d\n", write.SEQ);
-
-        timer.tv_sec = 1;
-        timer.tv_usec = 0;
-
-        readFdSet = *activeFdSet;
-
-        if(select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer)) printf("\n(server.c) > Error selecting from readFdSet.\n");
-        if(FD_ISSET(*fileDescriptor, &readFdSet)) {
-            if(packet_Read(*fileDescriptor, &read, hostInfo) == 0) {
-                if(read.ACK == true) {
-                    printf("\n(server.c) > ACK received, SEQ %d, disconnecting.\n", read.SEQ);
-                    return;
+        // Receive FIN from client.
+        switch(state) {
+            case 0:
+                readFdSet = *activeFdSet;
+                if(select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer) < 0) printf("\n(server.c)(CON S0) > Error selecting from readFdSet.\n");
+                if(FD_ISSET(*fileDescriptor, &readFdSet)) {
+                    printf("\n(server.c)(DCON S0) > Receiving input on socket, reading socket..\n");
+                    if(packet_Read(*fileDescriptor, &read, hostInfo) == 0) {
+                        if(read.FIN == true) {
+                            read.SEQR = write.SEQ;
+                            printf("\n(server.c)(DCON S0) > FIN received. Sequence number: %d\n", read.SEQ);
+                            state = 1;
+                        }
+                    }
                 }
-            }
-        }
-        else {
-            counter++;
-            printf("\n(server.c) > Timeout %d.\n", counter+1);
+            // Send FIN+ACK to client and wait for ACK/Timeout.
+            case 1:
+                packet_Write(*fileDescriptor, &write, sizeof(write), hostInfo);
+                printf("\n(server.c)(DCON S1) > FIN+ACK sent to the client with Sequence number: %d\n", write.SEQ);
+
+                timer.tv_sec = 1;
+                timer.tv_usec = 0;
+
+                readFdSet = *activeFdSet;
+
+                if(select(FD_SETSIZE, &readFdSet, NULL, NULL, &timer) < 0) printf("\n(server.c)(DCON S1) > Error selecting from readFdSet.\n");
+                if(FD_ISSET(*fileDescriptor, &readFdSet)) {
+                    if(packet_Read(*fileDescriptor, &read, hostInfo) == 0) {
+                        if(read.ACK == true && read.SEQR == write.SEQ) {
+                            printf("\n(server.c)(DCON S1) > ACK received, Sequence number: %d.\n", read.SEQ);
+                            printf("\n(server.c)(DCON S1) > Server disconnecting (SERVER_DISCONNECT).\n");
+                            return;
+                        }
+                    }
+                }
+                else {
+                    counter++;
+                    printf("\n(server.c) > Timeout %d.\n", counter+1);
+                }
         }
     }while(counter <= 3);
 }
 
 void receive_Slidingwindow(int *fileDescriptor, fd_set *activeFdSet, struct sockaddr_in *hostInfo, int windowSize) {
+    //data write, read;
+    //int windowPlace, currentPlace, oldestPlace;
+
+    //data * window = malloc(windowSize * sizeof(data));
+    //fd_set readFdSet;
+
+    //zero_Packet(&read);
+    //zero_Packet(&write);
+
 
 }
 
-void main_server(void) {
+int main(void) {
+    srand(time(NULL));
+    printf("\n(server.c) > Starting server..\n");
     int fileDescriptor, windowSize = 0;
     struct sockaddr_in hostInfo;
     fd_set activeFdSet;
@@ -156,7 +195,9 @@ void main_server(void) {
 
     printf("\n(server.c) > Waiting for connection...\n");
 
-    windowSize = handshake(&fileDescriptor, &activeFdSet, &hostInfo);
-    receive_Slidingwindow(&fileDescriptor, &activeFdSet, &hostInfo, &windowSize);
+    windowSize = server_Connect(&fileDescriptor, &activeFdSet, &hostInfo);
+    receive_Slidingwindow(&fileDescriptor, &activeFdSet, &hostInfo, windowSize);
     server_Disconnect(&fileDescriptor, &activeFdSet, &hostInfo);
+
+    return 0;
 }   

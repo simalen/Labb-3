@@ -1,0 +1,6 @@
+make --dry-run --keep-going --print-directory
+make: Entering directory '/home/simon/Desktop/Labb-3/Labb-3'
+ 
+make: Nothing to be done for 'all'.
+make: Leaving directory '/home/simon/Desktop/Labb-3/Labb-3'
+ 

@@ -1,6 +1,6 @@
 #include "data.h"
 
-void main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
     char hostName[hostNameLength];
     srand(time(NULL));
     if(argv[1] == NULL) {
@@ -13,4 +13,5 @@ void main(int argc, char *argv[]) {
         printf("Starting client at %s..\n", hostName);
         main_client(hostName);
     }
+    return 0;
 }
